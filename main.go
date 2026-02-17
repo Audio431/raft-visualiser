@@ -22,17 +22,22 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	// 5. Monitoring Loop
-	go func() {
-		for {
-			fmt.Println("\n--- 📊 Scoreboard ---")
-			for i := 0; i < n; i++ {
-				state, term := nodes[i].State, nodes[i].CurrentTerm
-				fmt.Printf("Node %d: %s (Term %d)\n", i, state, term)
-			}
-			time.Sleep(2 * time.Second)
-		}
-	}()
+	// go func() {
+	// 	for {
+	// 		fmt.Println("\n--- 📊 Scoreboard ---")
+	// 		for i := range n {
+	// 			state, term := nodes[i].GetState()
+	// 			fmt.Printf("Node %d: %s (Term %d)\n", i, state, term)
+	// 		}
+	// 	}
+	// }()
+
+	fmt.Println("\n--- 📊 Final Scoreboard ---")
+	for i := 0; i < n; i++ {
+		state, term := nodes[i].GetState()
+		fmt.Printf("Node %d: %v (Term %d)\n", i, state, term)
+	}
 
 	// Block Forever
-	select {}
+	// select {}
 }

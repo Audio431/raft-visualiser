@@ -104,8 +104,12 @@ func MakeRaft(id int, peerIds []int, net *network.Network) *Raft {
 
 func (rf *Raft) termLoop() {
 
-	timeoutDuration := time.Duration(500+rand.Intn(500)) * time.Millisecond
-	electionTimer := time.NewTimer(timeoutDuration)
+	getTimeout := func() time.Duration {
+		ms := 150 + (rand.Int63() % 150)
+		return time.Duration(ms) * time.Millisecond
+	}
+
+	electionTimer := time.NewTimer(getTimeout())
 	for {
 		rf.mu.Lock()
 		state := rf.State
@@ -125,11 +129,11 @@ func (rf *Raft) termLoop() {
 				default:
 				}
 			}
-			electionTimer.Reset(time.Duration(500+rand.Intn(500)) * time.Millisecond)
+			electionTimer.Reset(getTimeout())
 
 		case <-electionTimer.C: // Election timeout
 			rf.startElection()
-			electionTimer.Reset(time.Duration(500+rand.Intn(500)) * time.Millisecond)
+			electionTimer.Reset(getTimeout())
 		}
 	}
 }
@@ -172,7 +176,7 @@ func (rf *Raft) startElection() {
 
 				if reply.VoteGranted {
 					votesReceived++
-					if votesReceived > (len(rf.peersIds))/2 {
+					if votesReceived > (len(rf.peersIds))/2 { // majority votes received; 2f + 1 wheres f stands for max faulty nodes
 						rf.State = Leader
 						go rf.broadcastHeartbeat()
 						return
@@ -225,6 +229,12 @@ func (rf *Raft) ReceiveRequestVote(args interface{}, reply interface{}) {
 
 // Implement Interface for Network
 func (rf *Raft) GetId() int { return rf.Id }
+
+func (rf *Raft) GetState() (RaftState, int) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	return rf.State, rf.CurrentTerm
+}
 
 func (rf *Raft) broadcastHeartbeat() {
 	rf.mu.Lock()
