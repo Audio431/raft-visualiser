@@ -101,7 +101,7 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 
 	// Delay election loop to let all nodes start
 	go func() {
-		time.Sleep(2 * time.Second)
+		time.Sleep(5 * time.Second)
 		rf.termLoop()
 	}()
 
@@ -114,22 +114,14 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 func (rf *Raft) termLoop() {
 
 	getTimeout := func() time.Duration {
-		ms := 150 + (rand.Int63() % 150)
+		ms := 300 + (rand.Int63() % 150)
 		return time.Duration(ms) * time.Millisecond
 	}
 
 	electionTimer := time.NewTimer(getTimeout())
+	heartbeatInterval := time.NewTimer(3 * time.Millisecond)
+
 	for {
-		rf.mu.Lock()
-		state := rf.State
-		rf.mu.Unlock()
-
-		if state == Leader {
-			rf.broadcastHeartbeat()
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-
 		select {
 		case <-rf.heartbeatCh: // Heartbeat received; Leader is alive
 			if !electionTimer.Stop() {
@@ -141,8 +133,17 @@ func (rf *Raft) termLoop() {
 			electionTimer.Reset(getTimeout())
 
 		case <-electionTimer.C: // Election timeout
+			fmt.Print("Time out: Election start")
 			rf.startElection()
 			electionTimer.Reset(getTimeout())
+
+		case <-heartbeatInterval.C: // Leader sends heartbeat
+			rf.mu.Lock()
+			if rf.State == Leader {
+				go rf.broadcastHeartbeat()
+			}
+			heartbeatInterval.Reset(3 * time.Millisecond)
+			rf.mu.Unlock()
 		}
 	}
 }
@@ -185,6 +186,13 @@ func (rf *Raft) startElection() {
 
 			// Current Term may change due to AppendEntries from valid Leader
 			if rf.State != Candidate || rf.CurrentTerm != savedTerm {
+				return
+			}
+
+			if reply.Term > int32(rf.CurrentTerm) {
+				rf.CurrentTerm = int(reply.Term)
+				rf.VotedFor = -1
+				rf.State = Follower
 				return
 			}
 
@@ -291,10 +299,14 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (
 		return reply, nil
 	}
 
-	// Accept AppendEntries from current or newer term of leader
-	if (args.Term > int32(rf.CurrentTerm)) || (args.Term == int32(rf.CurrentTerm) && rf.State == Candidate) {
+	if args.Term > int32(rf.CurrentTerm) {
 		rf.CurrentTerm = int(args.Term)
 		rf.VotedFor = -1
+		rf.State = Follower
+		return reply, nil
+	}
+
+	if args.Term == int32(rf.CurrentTerm) {
 		rf.State = Follower
 	}
 
