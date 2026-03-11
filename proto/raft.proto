@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package raft;
+
+option go_package = "raft-visualiser/proto";
+
+// --- cited from In Search of an Understandable Consensus Algorithm (Extended Version) ---
+// https://pdos.csail.mit.edu/6.824/papers/raft-extended.pdf
+
+service Raft {
+  rpc AppendEntries(AppendEntriesArgs) returns (AppendEntriesReply) {}
+  rpc RequestVote(RequestVoteArgs) returns (RequestVoteReply) {}
+}
+
+message LogEntry {
+  int32 term = 1;
+  bytes command = 2;
+}
+
+message AppendEntriesArgs {
+    int32 Term = 1;                 // leader’s term
+    int32 LeaderId = 2;             // let followers redirect clients
+    int32 PrevLogIndex = 3;         // index of log entry immediately preceding new ones
+
+    int32 PrevLogTerm = 4;          // term of prevLogIndex entry
+    repeated LogEntry entries = 5;     // log entries to store (empty for heartbeat; may send more than one for efficiency)
+    int32 LeaderCommit = 6;         // leader’s commitIndex
+}
+
+message AppendEntriesReply {
+    int32 Term = 1;                 // currentTerm, for leader to update itself
+    bool Success = 2;               // true if follower contained entry matching prevLogIndex and prevLogTerm
+}
+
+message RequestVoteArgs {
+    int32 Term = 1;                 // candidate’s term
+    int32 CandidateId = 2;          // candidate requesting vote
+    int32 LastLogIndex = 3;        // index of candidate’s last log entry
+    int32 LastLogTerm = 4;         // term of candidate’s last log entry
+}
+
+message RequestVoteReply {
+    int32 Term = 1;
+    bool VoteGranted = 2;
+}

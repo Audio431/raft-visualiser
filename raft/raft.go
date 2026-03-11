@@ -1,14 +1,24 @@
 package raft
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"math/rand"
-	"raft-visualiser/network"
+	"net"
+	pb "raft-visualiser/proto"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type RaftState int
+
+type RaftServer interface {
+	RequestVote(context.Context, *pb.RequestVoteArgs) (*pb.RequestVoteReply, error)
+}
 
 const (
 	Follower RaftState = iota
@@ -28,9 +38,9 @@ type Raft struct {
 	mu sync.Mutex
 
 	// Persistent State
-	CurrentTerm int        // latest term server has seen (initialised to 0 at start)
-	VotedFor    int        // candidateId that received vote in current term (-1 if none)
-	Log         []LogEntry // log entries (First index is 1)
+	CurrentTerm int            // latest term server has seen (initialised to 0 at start)
+	VotedFor    int            // candidateId that received vote in current term (-1 if none)
+	Log         []*pb.LogEntry // log entries (First index is 1)
 
 	// Volatile State
 	CommitIndex int // index of highest log entry known to be committed
@@ -40,61 +50,60 @@ type Raft struct {
 	NextIndex  map[int]int // for each server, index of the next log entry to send to that server
 	MatchIndex map[int]int // for each server, index of highest log entry known to be replicated on server
 
-	// Additional Fields to Support Simulation
-	Id          int
-	State       RaftState
-	peersIds    []int
-	net         *network.Network
+	// Node identity and state
+	Id       int
+	State    RaftState
+	peersIds []int
+
+	// gRPC Clients and Server
+	peerClients map[int]pb.RaftClient
+	grpcServer  *grpc.Server
+	pb.UnimplementedRaftServer
+
 	heartbeatCh chan bool
 }
 
-type LogEntry struct {
-	Term    int
-	Command interface{}
-}
-
-type AppendEntriesArgs struct {
-	Term         int // leader’s term
-	LeaderId     int // let followers redirect clients
-	PrevLogIndex int // index of log entry immediately preceding new ones
-
-	PrevLogTerm  int        // term of prevLogIndex entry
-	Entries      []LogEntry // log entries to store (empty for heartbeat; may send more than one for efficiency)
-	LeaderCommit int        // leader’s commitIndex
-}
-
-type AppendEntriesReply struct {
-	Term    int  // currentTerm, for leader to update itself
-	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
-}
-
-type RequestVoteArgs struct {
-	Term         int // candidate’s term
-	CandidateId  int // candidate requesting vote
-	LastLogIndex int // index of candidate’s last log entry
-	LastLogTerm  int // term of candidate’s last log entry
-}
-
-type RequestVoteReply struct {
-	Term        int  // currentTerm, for candidate to update itself
-	VoteGranted bool // true means candidate received vote
-}
-
 // Constructor
-func MakeRaft(id int, peerIds []int, net *network.Network) *Raft {
+func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string) *Raft {
 	rf := &Raft{
 		Id:          id,
 		peersIds:    peerIds,
-		net:         net,
 		State:       Follower,
 		VotedFor:    -1,
 		CurrentTerm: 0,
 		heartbeatCh: make(chan bool),
+		peerClients: make(map[int]pb.RaftClient),
 	}
 
-	net.Register(rf)
+	lis, err := net.Listen("tcp", listenAddr)
 
-	go rf.termLoop()
+	if err != nil {
+		log.Fatalf("Failed to listen on %s: %v", listenAddr, err)
+	}
+
+	rf.grpcServer = grpc.NewServer()
+	pb.RegisterRaftServer(rf.grpcServer, rf)
+
+	go rf.grpcServer.Serve(lis)
+
+	for _, pid := range peerIds {
+		if pid == id {
+			continue
+		}
+
+		conn, err := grpc.NewClient(peerAddrs[pid], grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+		if err != nil {
+			log.Fatalf("Node %d failed to connect to %d: %v", id, pid, err)
+		}
+		rf.peerClients[pid] = pb.NewRaftClient(conn)
+	}
+
+	// Delay election loop to let all nodes start
+	go func() {
+		time.Sleep(2 * time.Second)
+		rf.termLoop()
+	}()
 
 	return rf
 }
@@ -157,74 +166,72 @@ func (rf *Raft) startElection() {
 		}
 
 		go func(targetId int) {
-			args := RequestVoteArgs{
-				Term:         savedTerm, // Ask for other nodes' votes in current term
-				CandidateId:  savedId,
+			args := &pb.RequestVoteArgs{
+				Term:         int32(savedTerm), // Ask for other nodes' votes in current term
+				CandidateId:  int32(savedId),
 				LastLogIndex: 0,
 				LastLogTerm:  0,
 			}
-			reply := RequestVoteReply{}
 
-			if rf.net.Call(targetId, "RequestVote", &args, &reply) {
-				rf.mu.Lock()
-				defer rf.mu.Unlock()
+			reply, err := rf.peerClients[targetId].RequestVote(context.Background(), args)
 
-				// Current Term may change due to AppendEntries from valid Leader
-				if rf.State != Candidate || rf.CurrentTerm != savedTerm {
+			if err != nil {
+				log.Printf("Node %d failed to request vote from %d: %v", rf.Id, targetId, err)
+				return
+			}
+
+			rf.mu.Lock()
+			defer rf.mu.Unlock()
+
+			// Current Term may change due to AppendEntries from valid Leader
+			if rf.State != Candidate || rf.CurrentTerm != savedTerm {
+				return
+			}
+
+			if reply.VoteGranted {
+				votesReceived++
+				if votesReceived > (len(rf.peersIds))/2 { // majority votes received; 2f + 1 wheres f stands for max faulty nodes
+					rf.State = Leader
+					go rf.broadcastHeartbeat()
 					return
 				}
-
-				if reply.VoteGranted {
-					votesReceived++
-					if votesReceived > (len(rf.peersIds))/2 { // majority votes received; 2f + 1 wheres f stands for max faulty nodes
-						rf.State = Leader
-						go rf.broadcastHeartbeat()
-						return
-					}
-				}
 			}
+
 		}(peerId)
 	}
 }
 
-func (rf *Raft) ReceiveRequestVote(args interface{}, reply interface{}) {
-	// Casting Interface
-	realArgs := args.(*RequestVoteArgs)
-	realReply := reply.(*RequestVoteReply)
+func (rf *Raft) RequestVote(ctx context.Context, args *pb.RequestVoteArgs) (*pb.RequestVoteReply, error) {
+	reply := &pb.RequestVoteReply{}
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if realArgs.Term > rf.CurrentTerm {
-		rf.CurrentTerm = realArgs.Term
+	if args.Term > int32(rf.CurrentTerm) {
+		rf.CurrentTerm = int(args.Term)
 		rf.State = Follower
 		rf.VotedFor = -1
 	}
 
-	// Reject RequestVote from older term of candidate
-	if realArgs.Term < rf.CurrentTerm {
-		realReply.VoteGranted = false
-		return
+	if args.Term < int32(rf.CurrentTerm) {
+		reply.VoteGranted = false
+		return reply, nil
 	}
 
-	realReply.Term = rf.CurrentTerm
+	reply.Term = int32(rf.CurrentTerm)
 
-	// Accept RequestVote from current or newer term of candidate
-	if rf.VotedFor == -1 || rf.VotedFor == realArgs.CandidateId {
-		rf.VotedFor = realArgs.CandidateId
-		realReply.VoteGranted = true
-
+	if rf.VotedFor == -1 || rf.VotedFor == int(args.CandidateId) {
+		rf.VotedFor = int(args.CandidateId)
+		reply.VoteGranted = true
 		select {
 		case rf.heartbeatCh <- true:
 		default:
 		}
-
-		return
 	} else {
-		realReply.VoteGranted = false
-		return
+		reply.VoteGranted = false
 	}
 
+	return reply, nil
 }
 
 // Implement Interface for Network
@@ -247,15 +254,14 @@ func (rf *Raft) broadcastHeartbeat() {
 			continue
 		}
 		go func(targetId int) {
-			args := AppendEntriesArgs{Term: savedTerm, LeaderId: savedTermId}
-			reply := AppendEntriesReply{}
-			if rf.net.Call(targetId, "AppendEntries", &args, &reply) {
+			args := &pb.AppendEntriesArgs{Term: int32(savedTerm), LeaderId: int32(savedTermId)}
+			if reply, err := rf.peerClients[targetId].AppendEntries(context.Background(), args); err != nil {
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
 
 				// If reply.Term > currentTerm, convert to Follower
-				if reply.Term > rf.CurrentTerm {
-					rf.CurrentTerm = reply.Term
+				if reply.Term > int32(rf.CurrentTerm) {
+					rf.CurrentTerm = int(reply.Term)
 					rf.State = Follower
 					rf.VotedFor = -1
 				}
@@ -271,33 +277,34 @@ func (rf *Raft) Kill() {
 	fmt.Printf("Node %d killed\n", rf.Id)
 }
 
-func (rf *Raft) ReceiveAppendEntries(args interface{}, reply interface{}) {
+func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (*pb.AppendEntriesReply, error) {
 	// Casting Interface
-	realArgs := args.(*AppendEntriesArgs)
-	realReply := reply.(*AppendEntriesReply)
+	reply := &pb.AppendEntriesReply{}
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
 	// Reject AppendEntries from older term of leader
-	if realArgs.Term < rf.CurrentTerm {
-		realReply.Term = rf.CurrentTerm
-		realReply.Success = false
-		return
+	if args.Term < int32(rf.CurrentTerm) {
+		reply.Term = int32(rf.CurrentTerm)
+		reply.Success = false
+		return reply, nil
 	}
 
 	// Accept AppendEntries from current or newer term of leader
-	if (realArgs.Term > rf.CurrentTerm) || (realArgs.Term == rf.CurrentTerm && rf.State == Candidate) {
-		rf.CurrentTerm = realArgs.Term
+	if (args.Term > int32(rf.CurrentTerm)) || (args.Term == int32(rf.CurrentTerm) && rf.State == Candidate) {
+		rf.CurrentTerm = int(args.Term)
 		rf.VotedFor = -1
 		rf.State = Follower
 	}
 
-	realReply.Success = true
+	reply.Success = true
 
 	// Reset Election Timer
 	select {
 	case rf.heartbeatCh <- true:
 	default:
 	}
+
+	return reply, nil
 }
