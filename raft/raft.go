@@ -27,12 +27,32 @@ const (
 	Dead
 )
 
+const (
+	electionTimeoutMin = 150 // ms
+	electionTimeoutMax = 300 // ms
+	heartbeatMs        = 50  // ms; must be well below election timeout floor
+)
+
 func (s RaftState) String() string {
 	return [...]string{"Follower", "Candidate", "Leader", "Dead"}[s]
 }
 
-// --- Main Struct --- cited from In Search of an Understandable Consensus Algorithm (Extended Version) ---
-// https://pdos.csail.mit.edu/6.824/papers/raft-extended.pdf
+// -- Main considerations during Leader Election --
+
+// Premise: any server may increment its own term, vote for itself, and send RequestVote RPCs to all peers in parallel.
+// This recurs until one of the following is satisfied:
+// 1. A server wins an election.
+// 2. Another server wins an election and assumes leadership.
+// 3. No winner emerges within the election period.
+
+// How an election proceeds in three scenarios:
+// Win by majority: each server grants at most one vote per term, first-come-first-served. A candidate that receives majority votes prevails, then sends heartbeats to assert authority and prevent further elections.
+
+// Lose to another leader: while awaiting RequestVote replies, a candidate may receive an AppendEntries RPC from a server claiming leadership. The decision hinges on term comparison — if the candidate's term exceeds the claimant's, it rejects; otherwise it steps down to follower.
+
+// No winner: if every server becomes a candidate and none secures a majority, votes split — known as "split vote" — leaving all candidates unable to prevail. They time out and start a new election round. The premise still holds, but this is not a definitive solution and may recur indefinitely.
+
+// Raft addresses this by using randomised election timeouts within a fixed interval, so one server's timer fires first and establishes leadership before the remaining servers time out.
 
 type Raft struct {
 	mu sync.Mutex
@@ -102,47 +122,48 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 	// Delay election loop to let all nodes start
 	go func() {
 		time.Sleep(5 * time.Second)
-		rf.termLoop()
+		rf.termClock()
 	}()
 
 	return rf
 }
 
-// termLoop manages the passage of time in Raft.
-// Since time is divided into terms, this loop handles the lifecycle of each term (elections and heartbeats).
-
-func (rf *Raft) termLoop() {
+func (rf *Raft) termClock() {
 
 	getTimeout := func() time.Duration {
-		ms := 300 + (rand.Int63() % 150)
+		// Random election timeout in [150, 300)ms to avoid split votes
+		ms := electionTimeoutMin + (rand.Int63() % (electionTimeoutMax - electionTimeoutMin))
 		return time.Duration(ms) * time.Millisecond
 	}
 
-	electionTimer := time.NewTimer(getTimeout())
-	heartbeatInterval := time.NewTimer(3 * time.Millisecond)
+	// Coupled periodic timers: heartbeat resets the election timer, maintaining leader authority.
+	// Absence of heartbeat within the election period triggers a new election.
+
+	electionTimeout := time.NewTimer(getTimeout())
+	heartbeatInterval := time.NewTimer(heartbeatMs * time.Millisecond)
 
 	for {
 		select {
 		case <-rf.heartbeatCh: // Heartbeat received; Leader is alive
-			if !electionTimer.Stop() {
+			if !electionTimeout.Stop() {
 				select {
-				case <-electionTimer.C: // Last heartbeat expired ==> timeout
+				case <-electionTimeout.C: // drain stale timer event
 				default:
 				}
 			}
-			electionTimer.Reset(getTimeout())
+			electionTimeout.Reset(getTimeout())
 
-		case <-electionTimer.C: // Election timeout
-			fmt.Print("Time out: Election start")
+		case <-electionTimeout.C: // Election timeout
+			fmt.Println("Time out: Election start")
 			rf.startElection()
-			electionTimer.Reset(getTimeout())
+			electionTimeout.Reset(getTimeout())
 
 		case <-heartbeatInterval.C: // Leader sends heartbeat
 			rf.mu.Lock()
 			if rf.State == Leader {
 				go rf.broadcastHeartbeat()
 			}
-			heartbeatInterval.Reset(3 * time.Millisecond)
+			heartbeatInterval.Reset(heartbeatMs * time.Millisecond)
 			rf.mu.Unlock()
 		}
 	}
