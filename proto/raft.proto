@@ -10,6 +10,16 @@ option go_package = "raft-visualiser/proto";
 service Raft {
   rpc AppendEntries(AppendEntriesArgs) returns (AppendEntriesReply) {}
   rpc RequestVote(RequestVoteArgs) returns (RequestVoteReply) {}
+   rpc SubmitCommand(SubmitCommandArgs) returns (SubmitCommandReply);
+}
+
+message SubmitCommandArgs {
+    bytes command = 1;
+}
+
+message SubmitCommandReply {
+    bool success = 1;
+    int32 leader_id = 2;
 }
 
 message LogEntry {

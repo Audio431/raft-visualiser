@@ -21,6 +21,102 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type SubmitCommandArgs struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Command       []byte                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitCommandArgs) Reset() {
+	*x = SubmitCommandArgs{}
+	mi := &file_proto_raft_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitCommandArgs) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitCommandArgs) ProtoMessage() {}
+
+func (x *SubmitCommandArgs) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_raft_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitCommandArgs.ProtoReflect.Descriptor instead.
+func (*SubmitCommandArgs) Descriptor() ([]byte, []int) {
+	return file_proto_raft_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *SubmitCommandArgs) GetCommand() []byte {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+type SubmitCommandReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	LeaderId      int32                  `protobuf:"varint,2,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitCommandReply) Reset() {
+	*x = SubmitCommandReply{}
+	mi := &file_proto_raft_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitCommandReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitCommandReply) ProtoMessage() {}
+
+func (x *SubmitCommandReply) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_raft_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitCommandReply.ProtoReflect.Descriptor instead.
+func (*SubmitCommandReply) Descriptor() ([]byte, []int) {
+	return file_proto_raft_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SubmitCommandReply) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SubmitCommandReply) GetLeaderId() int32 {
+	if x != nil {
+		return x.LeaderId
+	}
+	return 0
+}
+
 type LogEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Term          int32                  `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
@@ -31,7 +127,7 @@ type LogEntry struct {
 
 func (x *LogEntry) Reset() {
 	*x = LogEntry{}
-	mi := &file_proto_raft_proto_msgTypes[0]
+	mi := &file_proto_raft_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43,7 +139,7 @@ func (x *LogEntry) String() string {
 func (*LogEntry) ProtoMessage() {}
 
 func (x *LogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_raft_proto_msgTypes[0]
+	mi := &file_proto_raft_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -56,7 +152,7 @@ func (x *LogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
 func (*LogEntry) Descriptor() ([]byte, []int) {
-	return file_proto_raft_proto_rawDescGZIP(), []int{0}
+	return file_proto_raft_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *LogEntry) GetTerm() int32 {
@@ -87,7 +183,7 @@ type AppendEntriesArgs struct {
 
 func (x *AppendEntriesArgs) Reset() {
 	*x = AppendEntriesArgs{}
-	mi := &file_proto_raft_proto_msgTypes[1]
+	mi := &file_proto_raft_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -99,7 +195,7 @@ func (x *AppendEntriesArgs) String() string {
 func (*AppendEntriesArgs) ProtoMessage() {}
 
 func (x *AppendEntriesArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_raft_proto_msgTypes[1]
+	mi := &file_proto_raft_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -112,7 +208,7 @@ func (x *AppendEntriesArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendEntriesArgs.ProtoReflect.Descriptor instead.
 func (*AppendEntriesArgs) Descriptor() ([]byte, []int) {
-	return file_proto_raft_proto_rawDescGZIP(), []int{1}
+	return file_proto_raft_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *AppendEntriesArgs) GetTerm() int32 {
@@ -167,7 +263,7 @@ type AppendEntriesReply struct {
 
 func (x *AppendEntriesReply) Reset() {
 	*x = AppendEntriesReply{}
-	mi := &file_proto_raft_proto_msgTypes[2]
+	mi := &file_proto_raft_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -179,7 +275,7 @@ func (x *AppendEntriesReply) String() string {
 func (*AppendEntriesReply) ProtoMessage() {}
 
 func (x *AppendEntriesReply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_raft_proto_msgTypes[2]
+	mi := &file_proto_raft_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -192,7 +288,7 @@ func (x *AppendEntriesReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendEntriesReply.ProtoReflect.Descriptor instead.
 func (*AppendEntriesReply) Descriptor() ([]byte, []int) {
-	return file_proto_raft_proto_rawDescGZIP(), []int{2}
+	return file_proto_raft_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *AppendEntriesReply) GetTerm() int32 {
@@ -221,7 +317,7 @@ type RequestVoteArgs struct {
 
 func (x *RequestVoteArgs) Reset() {
 	*x = RequestVoteArgs{}
-	mi := &file_proto_raft_proto_msgTypes[3]
+	mi := &file_proto_raft_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -233,7 +329,7 @@ func (x *RequestVoteArgs) String() string {
 func (*RequestVoteArgs) ProtoMessage() {}
 
 func (x *RequestVoteArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_raft_proto_msgTypes[3]
+	mi := &file_proto_raft_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -246,7 +342,7 @@ func (x *RequestVoteArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVoteArgs.ProtoReflect.Descriptor instead.
 func (*RequestVoteArgs) Descriptor() ([]byte, []int) {
-	return file_proto_raft_proto_rawDescGZIP(), []int{3}
+	return file_proto_raft_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RequestVoteArgs) GetTerm() int32 {
@@ -287,7 +383,7 @@ type RequestVoteReply struct {
 
 func (x *RequestVoteReply) Reset() {
 	*x = RequestVoteReply{}
-	mi := &file_proto_raft_proto_msgTypes[4]
+	mi := &file_proto_raft_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -299,7 +395,7 @@ func (x *RequestVoteReply) String() string {
 func (*RequestVoteReply) ProtoMessage() {}
 
 func (x *RequestVoteReply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_raft_proto_msgTypes[4]
+	mi := &file_proto_raft_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -312,7 +408,7 @@ func (x *RequestVoteReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVoteReply.ProtoReflect.Descriptor instead.
 func (*RequestVoteReply) Descriptor() ([]byte, []int) {
-	return file_proto_raft_proto_rawDescGZIP(), []int{4}
+	return file_proto_raft_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RequestVoteReply) GetTerm() int32 {
@@ -333,7 +429,12 @@ var File_proto_raft_proto protoreflect.FileDescriptor
 
 const file_proto_raft_proto_rawDesc = "" +
 	"\n" +
-	"\x10proto/raft.proto\x12\x04raft\"8\n" +
+	"\x10proto/raft.proto\x12\x04raft\"-\n" +
+	"\x11SubmitCommandArgs\x12\x18\n" +
+	"\acommand\x18\x01 \x01(\fR\acommand\"K\n" +
+	"\x12SubmitCommandReply\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
+	"\tleader_id\x18\x02 \x01(\x05R\bleaderId\"8\n" +
 	"\bLogEntry\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x05R\x04term\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\fR\acommand\"\xd7\x01\n" +
@@ -354,10 +455,11 @@ const file_proto_raft_proto_rawDesc = "" +
 	"\vLastLogTerm\x18\x04 \x01(\x05R\vLastLogTerm\"H\n" +
 	"\x10RequestVoteReply\x12\x12\n" +
 	"\x04Term\x18\x01 \x01(\x05R\x04Term\x12 \n" +
-	"\vVoteGranted\x18\x02 \x01(\bR\vVoteGranted2\x8c\x01\n" +
+	"\vVoteGranted\x18\x02 \x01(\bR\vVoteGranted2\xd0\x01\n" +
 	"\x04Raft\x12D\n" +
 	"\rAppendEntries\x12\x17.raft.AppendEntriesArgs\x1a\x18.raft.AppendEntriesReply\"\x00\x12>\n" +
-	"\vRequestVote\x12\x15.raft.RequestVoteArgs\x1a\x16.raft.RequestVoteReply\"\x00B\x17Z\x15raft-visualiser/protob\x06proto3"
+	"\vRequestVote\x12\x15.raft.RequestVoteArgs\x1a\x16.raft.RequestVoteReply\"\x00\x12B\n" +
+	"\rSubmitCommand\x12\x17.raft.SubmitCommandArgs\x1a\x18.raft.SubmitCommandReplyB\x17Z\x15raft-visualiser/protob\x06proto3"
 
 var (
 	file_proto_raft_proto_rawDescOnce sync.Once
@@ -371,22 +473,26 @@ func file_proto_raft_proto_rawDescGZIP() []byte {
 	return file_proto_raft_proto_rawDescData
 }
 
-var file_proto_raft_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_proto_raft_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_proto_raft_proto_goTypes = []any{
-	(*LogEntry)(nil),           // 0: raft.LogEntry
-	(*AppendEntriesArgs)(nil),  // 1: raft.AppendEntriesArgs
-	(*AppendEntriesReply)(nil), // 2: raft.AppendEntriesReply
-	(*RequestVoteArgs)(nil),    // 3: raft.RequestVoteArgs
-	(*RequestVoteReply)(nil),   // 4: raft.RequestVoteReply
+	(*SubmitCommandArgs)(nil),  // 0: raft.SubmitCommandArgs
+	(*SubmitCommandReply)(nil), // 1: raft.SubmitCommandReply
+	(*LogEntry)(nil),           // 2: raft.LogEntry
+	(*AppendEntriesArgs)(nil),  // 3: raft.AppendEntriesArgs
+	(*AppendEntriesReply)(nil), // 4: raft.AppendEntriesReply
+	(*RequestVoteArgs)(nil),    // 5: raft.RequestVoteArgs
+	(*RequestVoteReply)(nil),   // 6: raft.RequestVoteReply
 }
 var file_proto_raft_proto_depIdxs = []int32{
-	0, // 0: raft.AppendEntriesArgs.entries:type_name -> raft.LogEntry
-	1, // 1: raft.Raft.AppendEntries:input_type -> raft.AppendEntriesArgs
-	3, // 2: raft.Raft.RequestVote:input_type -> raft.RequestVoteArgs
-	2, // 3: raft.Raft.AppendEntries:output_type -> raft.AppendEntriesReply
-	4, // 4: raft.Raft.RequestVote:output_type -> raft.RequestVoteReply
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
+	2, // 0: raft.AppendEntriesArgs.entries:type_name -> raft.LogEntry
+	3, // 1: raft.Raft.AppendEntries:input_type -> raft.AppendEntriesArgs
+	5, // 2: raft.Raft.RequestVote:input_type -> raft.RequestVoteArgs
+	0, // 3: raft.Raft.SubmitCommand:input_type -> raft.SubmitCommandArgs
+	4, // 4: raft.Raft.AppendEntries:output_type -> raft.AppendEntriesReply
+	6, // 5: raft.Raft.RequestVote:output_type -> raft.RequestVoteReply
+	1, // 6: raft.Raft.SubmitCommand:output_type -> raft.SubmitCommandReply
+	4, // [4:7] is the sub-list for method output_type
+	1, // [1:4] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -403,7 +509,7 @@ func file_proto_raft_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_raft_proto_rawDesc), len(file_proto_raft_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

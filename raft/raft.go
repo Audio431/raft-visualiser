@@ -80,6 +80,9 @@ type Raft struct {
 	grpcServer  *grpc.Server
 	pb.UnimplementedRaftServer
 
+	// For redirecting clients to current leader
+	leaderId int
+
 	heartbeatCh chan bool
 }
 
@@ -154,8 +157,10 @@ func (rf *Raft) termClock() {
 			electionTimeout.Reset(getTimeout())
 
 		case <-electionTimeout.C: // Election timeout
-			fmt.Println("Time out: Election start")
-			rf.startElection()
+			if rf.State != Leader {
+				fmt.Println("Time out: Election start")
+				rf.startElection()
+			}
 			electionTimeout.Reset(getTimeout())
 
 		case <-heartbeatInterval.C: // Leader sends heartbeat
@@ -221,6 +226,7 @@ func (rf *Raft) startElection() {
 				votesReceived++
 				if votesReceived > (len(rf.peersIds))/2 { // majority votes received; 2f + 1 wheres f stands for max faulty nodes
 					rf.State = Leader
+					rf.leaderId = rf.Id
 					go rf.broadcastHeartbeat()
 					return
 				}
@@ -307,7 +313,6 @@ func (rf *Raft) Kill() {
 }
 
 func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (*pb.AppendEntriesReply, error) {
-	// Casting Interface
 	reply := &pb.AppendEntriesReply{}
 
 	rf.mu.Lock()
@@ -324,20 +329,30 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (
 		rf.CurrentTerm = int(args.Term)
 		rf.VotedFor = -1
 		rf.State = Follower
-		return reply, nil
 	}
 
 	if args.Term == int32(rf.CurrentTerm) {
 		rf.State = Follower
 	}
 
-	reply.Success = true
+	rf.leaderId = int(args.LeaderId)
 
-	// Reset Election Timer
+	reply.Success = true
 	select {
 	case rf.heartbeatCh <- true:
 	default:
 	}
 
 	return reply, nil
+}
+
+func (rf *Raft) SubmitCommand(ctx context.Context, args *pb.SubmitCommandArgs) (*pb.SubmitCommandReply, error) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if rf.State != Leader {
+		return &pb.SubmitCommandReply{Success: false, LeaderId: int32(rf.leaderId)}, nil
+	}
+
+	return &pb.SubmitCommandReply{Success: true, LeaderId: int32(rf.Id)}, nil
 }
