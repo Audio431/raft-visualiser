@@ -92,6 +92,7 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 		Id:          id,
 		peersIds:    peerIds,
 		State:       Follower,
+		Log:         []*pb.LogEntry{},
 		VotedFor:    -1,
 		CurrentTerm: 0,
 		heartbeatCh: make(chan bool),
@@ -225,7 +226,17 @@ func (rf *Raft) startElection() {
 			if reply.VoteGranted {
 				votesReceived++
 				if votesReceived > (len(rf.peersIds))/2 { // majority votes received; 2f + 1 wheres f stands for max faulty nodes
+					// Prevent resent the entire log on every heartbeat; only send new entries after election
 					rf.State = Leader
+
+					rf.NextIndex = make(map[int]int)
+					rf.MatchIndex = make(map[int]int)
+
+					for _, pid := range rf.peersIds {
+						rf.NextIndex[pid] = len(rf.Log)
+						rf.MatchIndex[pid] = 0
+					}
+
 					rf.leaderId = rf.Id
 					go rf.broadcastHeartbeat()
 					return
@@ -289,7 +300,12 @@ func (rf *Raft) broadcastHeartbeat() {
 			continue
 		}
 		go func(targetId int) {
+			nextIndex := rf.NextIndex[targetId]
+
 			args := &pb.AppendEntriesArgs{Term: int32(savedTerm), LeaderId: int32(savedTermId)}
+			args.Entries = rf.Log[nextIndex:]
+			args.PrevLogIndex = int32(nextIndex - 1)
+
 			if reply, err := rf.peerClients[targetId].AppendEntries(context.Background(), args); err != nil {
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
@@ -300,7 +316,14 @@ func (rf *Raft) broadcastHeartbeat() {
 					rf.State = Follower
 					rf.VotedFor = -1
 				}
+			} else {
+				rf.mu.Lock()
+				defer rf.mu.Unlock()
+
+				rf.NextIndex[targetId] = nextIndex + len(args.Entries)
+				rf.MatchIndex[targetId] = rf.NextIndex[targetId] - 1
 			}
+
 		}(peerId)
 	}
 }
@@ -335,6 +358,15 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (
 		rf.State = Follower
 	}
 
+	for i, entry := range args.Entries {
+		index := int(args.PrevLogIndex) + 1 + i
+		if index < len(rf.Log) {
+			rf.Log[index] = entry // overwrite conflicting entry
+		} else {
+			rf.Log = append(rf.Log, entry)
+		}
+	}
+
 	rf.leaderId = int(args.LeaderId)
 
 	reply.Success = true
@@ -352,6 +384,8 @@ func (rf *Raft) SubmitCommand(ctx context.Context, args *pb.SubmitCommandArgs) (
 
 	if rf.State != Leader {
 		return &pb.SubmitCommandReply{Success: false, LeaderId: int32(rf.leaderId)}, nil
+	} else {
+		rf.Log = append(rf.Log, &pb.LogEntry{Term: int32(rf.CurrentTerm), Command: args.Command})
 	}
 
 	return &pb.SubmitCommandReply{Success: true, LeaderId: int32(rf.Id)}, nil

@@ -257,6 +257,7 @@ type AppendEntriesReply struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Term          int32                  `protobuf:"varint,1,opt,name=Term,proto3" json:"Term,omitempty"`       // currentTerm, for leader to update itself
 	Success       bool                   `protobuf:"varint,2,opt,name=Success,proto3" json:"Success,omitempty"` // true if follower contained entry matching prevLogIndex and prevLogTerm
+	PrevLogIndex  int32                  `protobuf:"varint,3,opt,name=PrevLogIndex,proto3" json:"PrevLogIndex,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -303,6 +304,13 @@ func (x *AppendEntriesReply) GetSuccess() bool {
 		return x.Success
 	}
 	return false
+}
+
+func (x *AppendEntriesReply) GetPrevLogIndex() int32 {
+	if x != nil {
+		return x.PrevLogIndex
+	}
+	return 0
 }
 
 type RequestVoteArgs struct {
@@ -444,10 +452,11 @@ const file_proto_raft_proto_rawDesc = "" +
 	"\fPrevLogIndex\x18\x03 \x01(\x05R\fPrevLogIndex\x12 \n" +
 	"\vPrevLogTerm\x18\x04 \x01(\x05R\vPrevLogTerm\x12(\n" +
 	"\aentries\x18\x05 \x03(\v2\x0e.raft.LogEntryR\aentries\x12\"\n" +
-	"\fLeaderCommit\x18\x06 \x01(\x05R\fLeaderCommit\"B\n" +
+	"\fLeaderCommit\x18\x06 \x01(\x05R\fLeaderCommit\"f\n" +
 	"\x12AppendEntriesReply\x12\x12\n" +
 	"\x04Term\x18\x01 \x01(\x05R\x04Term\x12\x18\n" +
-	"\aSuccess\x18\x02 \x01(\bR\aSuccess\"\x8d\x01\n" +
+	"\aSuccess\x18\x02 \x01(\bR\aSuccess\x12\"\n" +
+	"\fPrevLogIndex\x18\x03 \x01(\x05R\fPrevLogIndex\"\x8d\x01\n" +
 	"\x0fRequestVoteArgs\x12\x12\n" +
 	"\x04Term\x18\x01 \x01(\x05R\x04Term\x12 \n" +
 	"\vCandidateId\x18\x02 \x01(\x05R\vCandidateId\x12\"\n" +
