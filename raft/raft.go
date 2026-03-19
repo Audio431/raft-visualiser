@@ -306,24 +306,24 @@ func (rf *Raft) broadcastHeartbeat() {
 			args.Entries = rf.Log[nextIndex:]
 			args.PrevLogIndex = int32(nextIndex - 1)
 
-			if reply, err := rf.peerClients[targetId].AppendEntries(context.Background(), args); err != nil {
+			if reply, err := rf.peerClients[targetId].AppendEntries(context.Background(), args); err == nil {
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
-
-				// If reply.Term > currentTerm, convert to Follower
 				if reply.Term > int32(rf.CurrentTerm) {
 					rf.CurrentTerm = int(reply.Term)
 					rf.State = Follower
 					rf.VotedFor = -1
+					return
+				} else if reply.Success {
+					rf.NextIndex[targetId] = nextIndex + len(args.Entries)
+					rf.MatchIndex[targetId] = rf.NextIndex[targetId] - 1
+				} else {
+					rf.NextIndex[targetId]--
 				}
 			} else {
-				rf.mu.Lock()
-				defer rf.mu.Unlock()
-
-				rf.NextIndex[targetId] = nextIndex + len(args.Entries)
-				rf.MatchIndex[targetId] = rf.NextIndex[targetId] - 1
+				log.Printf("Node %d failed to send heartbeat to %d: %v", rf.Id, targetId, err)
+				return
 			}
-
 		}(peerId)
 	}
 }
