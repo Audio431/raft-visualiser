@@ -39,7 +39,6 @@ message AppendEntriesArgs {
 message AppendEntriesReply {
     int32 Term = 1;                 // currentTerm, for leader to update itself
     bool Success = 2;               // true if follower contained entry matching prevLogIndex and prevLogTerm
-    int32 PrevLogIndex = 3;
 }
 
 message RequestVoteArgs {

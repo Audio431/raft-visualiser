@@ -369,6 +369,11 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (
 
 	rf.leaderId = int(args.LeaderId)
 
+	if args.PrevLogIndex >= 0 && (args.PrevLogIndex >= int32(len(rf.Log)) || rf.Log[args.PrevLogIndex].Term != args.PrevLogTerm) {
+		reply.Success = false
+		return reply, nil
+	}
+
 	reply.Success = true
 	select {
 	case rf.heartbeatCh <- true:
