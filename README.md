@@ -14,9 +14,9 @@ Implementation follows the paper's structure. Each phase corresponds to a sectio
 - [ ] Leader election — term management, RequestVote RPC, randomised election timeouts, split vote resolution
 - [ ] Log replication — AppendEntries RPC, log consistency check, commitment by majority
 - [ ] Safety — election restriction (§5.4.1), commitment rules for entries from prior terms (§5.4.2)
-- [ ] Persistence — stable storage of currentTerm, votedFor, and log entries across restarts
-- [ ] Log compaction — InstallSnapshot RPC, state machine snapshotting (§7)
-- [ ] Cluster membership changes — joint consensus for configuration transitions (§6)
+- [ ] Persistence — stable storage of currentTerm, votedFor, and log entries across restarts [As a cluster seldomly been restart in this practice project then retain to be a could have]
+- [ ] Log compaction — InstallSnapshot RPC, state machine snapshotting (§7) [retain to be a could have requirement]
+- [ ] Cluster membership changes — joint consensus for configuration transitions (§6) [retain to be a could have requirement]
 - [ ] OTEL instrumentation — tracing across all RPCs and state transitions
 
 ### Visualisation (React + OTEL)
