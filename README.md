@@ -34,7 +34,7 @@ Implementation follows the paper's structure. Each phase corresponds to a sectio
 - [ ] Log compaction — InstallSnapshot RPC, state machine snapshotting (§7) [retain to be a could have requirement]
 - [ ] Cluster membership changes — joint consensus for configuration transitions (§6) [retain to be a could have requirement]
 - [ ] OTEL instrumentation — tracing across all RPCs and state transitions
-  - [x] OTEL Go SDK wired — OTLP/gRPC exporter to Jaeger, per-node `service.name`, flush on shutdown, startup smoke span
+  - [x] OTEL Go SDK wired — OTLP/gRPC exporter to the OTEL Collector, per-node `service.name`, flush on shutdown, startup smoke span
   - [ ] Spans on RequestVote / AppendEntries and on state transitions
 
 ### Visualisation (React + OTEL)
