@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	pb "raft-visualiser/proto"
 	"raft-visualiser/raft"
+	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
@@ -89,6 +92,17 @@ func main() {
 		}
 	}()
 
-	// Block Forever
-	select {}
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	fmt.Println("Shutting down — flushing traces...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for i, node := range nodes {
+		if err := node.Shutdown(shutdownCtx); err != nil {
+			fmt.Printf("Node %d shutdown error: %v\n", i, err)
+		}
+	}
+	fmt.Println("Shutdown complete.")
 }

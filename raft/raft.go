@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -84,6 +85,8 @@ type Raft struct {
 	leaderId int
 
 	heartbeatCh chan bool
+
+	tel *telemetry
 }
 
 // Constructor
@@ -98,6 +101,17 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 		heartbeatCh: make(chan bool),
 		peerClients: make(map[int]pb.RaftClient),
 	}
+
+	tel, err := newTelemetry(id)
+	if err != nil {
+		log.Fatalf("Node %d: telemetry: %v", id, err)
+	}
+	rf.tel = tel
+
+	// Smoke-test span — confirms the collector is receiving data before further instrumentation
+	_, span := rf.tel.tracer.Start(context.Background(), "raft.node.startup")
+	span.SetAttributes(attribute.Int("node.id", id))
+	span.End()
 
 	lis, err := net.Listen("tcp", listenAddr)
 
@@ -333,6 +347,11 @@ func (rf *Raft) Kill() {
 	defer rf.mu.Unlock()
 	rf.State = Dead
 	fmt.Printf("Node %d killed\n", rf.Id)
+}
+
+func (rf *Raft) Shutdown(ctx context.Context) error {
+	rf.Kill()
+	return rf.tel.Shutdown(ctx)
 }
 
 func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (*pb.AppendEntriesReply, error) {
