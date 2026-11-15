@@ -77,8 +77,8 @@ type Raft struct {
 	peersIds []int
 
 	// gRPC Clients and Server
-	peerClients map[int]pb.RaftClient
-	grpcServer  *grpc.Server
+	transport  Transport
+	grpcServer *grpc.Server
 	pb.UnimplementedRaftServer
 
 	// For redirecting clients to current leader
@@ -91,6 +91,9 @@ type Raft struct {
 
 // Constructor
 func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string) *Raft {
+
+	clients := make(map[int]pb.RaftClient)
+
 	rf := &Raft{
 		Id:          id,
 		peersIds:    peerIds,
@@ -99,7 +102,7 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 		VotedFor:    -1,
 		CurrentTerm: 0,
 		heartbeatCh: make(chan bool),
-		peerClients: make(map[int]pb.RaftClient),
+		transport:   &grpcTransport{clients: clients},
 	}
 
 	tel, err := newTelemetry(id)
@@ -134,7 +137,7 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 		if err != nil {
 			log.Fatalf("Node %d failed to connect to %d: %v", id, pid, err)
 		}
-		rf.peerClients[pid] = pb.NewRaftClient(conn)
+		clients[pid] = pb.NewRaftClient(conn)
 	}
 
 	// Delay election loop to let all nodes start
@@ -215,7 +218,7 @@ func (rf *Raft) startElection() {
 				LastLogTerm:  0,
 			}
 
-			reply, err := rf.peerClients[targetId].RequestVote(context.Background(), args)
+			reply, err := rf.transport.RequestVote(context.Background(), targetId, args)
 
 			if err != nil {
 				log.Printf("Node %d failed to request vote from %d: %v", rf.Id, targetId, err)
@@ -320,7 +323,7 @@ func (rf *Raft) broadcastHeartbeat() {
 			args.Entries = rf.Log[nextIndex:]
 			args.PrevLogIndex = int32(nextIndex - 1)
 
-			if reply, err := rf.peerClients[targetId].AppendEntries(context.Background(), args); err == nil {
+			if reply, err := rf.transport.AppendEntries(context.Background(), targetId, args); err == nil {
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
 				if reply.Term > int32(rf.CurrentTerm) {
