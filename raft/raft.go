@@ -81,12 +81,20 @@ type Raft struct {
 	grpcServer *grpc.Server
 	pb.UnimplementedRaftServer
 
+	// Committed entries are delivered here in index order
+	applyCh chan Applied
+
 	// For redirecting clients to current leader
 	leaderId int
 
 	heartbeatCh chan bool
 
 	tel *telemetry
+}
+
+type Applied struct {
+	Index   int
+	Command []byte
 }
 
 func NewNode(id int, peerIds []int, transport Transport) *Raft {
@@ -99,8 +107,17 @@ func NewNode(id int, peerIds []int, transport Transport) *Raft {
 		CurrentTerm: 0,
 		heartbeatCh: make(chan bool),
 		transport:   transport,
+		applyCh:     make(chan Applied, 1024),
 	}
 	return rf
+}
+
+func (rf *Raft) Run() {
+	go rf.termClock()
+}
+
+func (rf *Raft) Applied() <-chan Applied {
+	return rf.applyCh
 }
 
 // Constructor
