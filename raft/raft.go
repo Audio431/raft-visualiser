@@ -197,10 +197,7 @@ func (rf *Raft) termClock() {
 			electionTimeout.Reset(getTimeout())
 
 		case <-electionTimeout.C: // Election timeout
-			if rf.State != Leader {
-				fmt.Println("Time out: Election start")
-				rf.startElection()
-			}
+			rf.startElection()
 			electionTimeout.Reset(getTimeout())
 
 		case <-heartbeatInterval.C: // Leader sends heartbeat
@@ -218,6 +215,13 @@ func (rf *Raft) startElection() {
 
 	// Vote for self and increment term
 	rf.mu.Lock()
+	if rf.State == Leader {
+		rf.mu.Unlock()
+		return
+	}
+
+	fmt.Println("Time out: Election start")
+
 	rf.State = Candidate
 	rf.CurrentTerm += 1
 	rf.VotedFor = rf.Id
