@@ -343,11 +343,13 @@ func (rf *Raft) broadcastHeartbeat() {
 			continue
 		}
 		go func(targetId int) {
+			rf.mu.Lock()
 			nextIndex := rf.NextIndex[targetId]
 
 			args := &pb.AppendEntriesArgs{Term: int32(savedTerm), LeaderId: int32(savedTermId)}
 			args.Entries = rf.Log[nextIndex:]
 			args.PrevLogIndex = int32(nextIndex - 1)
+			rf.mu.Unlock()
 
 			if reply, err := rf.transport.AppendEntries(context.Background(), targetId, args); err == nil {
 				rf.mu.Lock()
