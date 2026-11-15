@@ -410,14 +410,25 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (
 	return reply, nil
 }
 
-func (rf *Raft) SubmitCommand(ctx context.Context, args *pb.SubmitCommandArgs) (*pb.SubmitCommandReply, error) {
+func (rf *Raft) Submit(command []byte) (index int, term int, isLeader bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
 	if rf.State != Leader {
+		return -1, rf.CurrentTerm, false
+	}
+
+	rf.Log = append(rf.Log, &pb.LogEntry{Term: int32(rf.CurrentTerm), Command: command})
+	return len(rf.Log), rf.CurrentTerm, true
+}
+
+func (rf *Raft) SubmitCommand(ctx context.Context, args *pb.SubmitCommandArgs) (*pb.SubmitCommandReply, error) {
+	_, _, isLeader := rf.Submit(args.Command)
+
+	if !isLeader {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
 		return &pb.SubmitCommandReply{Success: false, LeaderId: int32(rf.leaderId)}, nil
-	} else {
-		rf.Log = append(rf.Log, &pb.LogEntry{Term: int32(rf.CurrentTerm), Command: args.Command})
 	}
 
 	return &pb.SubmitCommandReply{Success: true, LeaderId: int32(rf.Id)}, nil
