@@ -89,11 +89,7 @@ type Raft struct {
 	tel *telemetry
 }
 
-// Constructor
-func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string) *Raft {
-
-	clients := make(map[int]pb.RaftClient)
-
+func NewNode(id int, peerIds []int, transport Transport) *Raft {
 	rf := &Raft{
 		Id:          id,
 		peersIds:    peerIds,
@@ -102,8 +98,17 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 		VotedFor:    -1,
 		CurrentTerm: 0,
 		heartbeatCh: make(chan bool),
-		transport:   &grpcTransport{clients: clients},
+		transport:   transport,
 	}
+	return rf
+}
+
+// Constructor
+func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string) *Raft {
+
+	clients := make(map[int]pb.RaftClient)
+
+	rf := NewNode(id, peerIds, &grpcTransport{clients: clients})
 
 	tel, err := newTelemetry(id)
 	if err != nil {
