@@ -1,0 +1,66 @@
+name: Raft tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  # Build and the repository's own tests (gRPC path).
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  # The MIT 6.5840 Lab 3 tester, run against the core in this repository.
+  # The lab code is fetched at run time and is never stored here.
+  # The adapter (raft1/raft.go) lives in a private repository.
+  mit-6-5840:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out raft-visualiser
+        uses: actions/checkout@v4
+        with:
+          path: raft-visualiser
+
+      - name: Check out the adapter (private repository)
+        uses: actions/checkout@v4
+        with:
+          repository: Audio431/raft-mit-adapter
+          token: ${{ secrets.ADAPTER_REPO_TOKEN }}
+          path: adapter
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: raft-visualiser/go.mod
+
+      - name: Fetch the 6.5840 lab code
+        run: git clone --depth 1 git://g.csail.mit.edu/6.5840-golabs-2026 6.5840
+
+      - name: Wire the lab to raft-visualiser
+        working-directory: 6.5840/src
+        run: |
+          rm main/diskvd.go main/lockc.go main/lockd.go main/pbc.go main/pbd.go main/viewd.go
+          cp "$GITHUB_WORKSPACE/adapter/raft.go" raft1/raft.go
+          go mod edit -go="$(cd "$GITHUB_WORKSPACE/raft-visualiser" && go list -m -f '{{.GoVersion}}')"
+          go mod edit -require=raft-visualiser@v0.0.0
+          go mod edit -replace=raft-visualiser="$GITHUB_WORKSPACE/raft-visualiser"
+          go mod tidy
+
+      # The Makefile builds the raft1d daemon first, then runs the tests.
+      # -vet=off: the lab's test code predates the Go 1.24 printf vet check.
+      - name: Lab 3A (leader election)
+        working-directory: 6.5840/src
+        run: make RUN="-vet=off -run 3A" raft1
+
+      # Add once commit and apply are implemented:
+      # - name: Lab 3B (log replication)
+      #   working-directory: 6.5840/src
+      #   run: make RUN="-vet=off -run 3B" raft1
