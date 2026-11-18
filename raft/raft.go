@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -76,18 +77,27 @@ type Raft struct {
 	peersIds []int
 
 	// gRPC Clients and Server
-	peerClients map[int]pb.RaftClient
-	grpcServer  *grpc.Server
+	transport  Transport
+	grpcServer *grpc.Server
 	pb.UnimplementedRaftServer
+
+	// Committed entries are delivered here in index order
+	applyCh chan Applied
 
 	// For redirecting clients to current leader
 	leaderId int
 
 	heartbeatCh chan bool
+
+	tel *telemetry
 }
 
-// Constructor
-func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string) *Raft {
+type Applied struct {
+	Index   int
+	Command []byte
+}
+
+func NewNode(id int, peerIds []int, transport Transport) *Raft {
 	rf := &Raft{
 		Id:          id,
 		peersIds:    peerIds,
@@ -96,8 +106,37 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 		VotedFor:    -1,
 		CurrentTerm: 0,
 		heartbeatCh: make(chan bool),
-		peerClients: make(map[int]pb.RaftClient),
+		transport:   transport,
+		applyCh:     make(chan Applied, 1024),
 	}
+	return rf
+}
+
+func (rf *Raft) Run() {
+	go rf.termClock()
+}
+
+func (rf *Raft) Applied() <-chan Applied {
+	return rf.applyCh
+}
+
+// Constructor
+func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string) *Raft {
+
+	clients := make(map[int]pb.RaftClient)
+
+	rf := NewNode(id, peerIds, &grpcTransport{clients: clients})
+
+	tel, err := newTelemetry(id)
+	if err != nil {
+		log.Fatalf("Node %d: telemetry: %v", id, err)
+	}
+	rf.tel = tel
+
+	// Smoke-test span — confirms the collector is receiving data before further instrumentation
+	_, span := rf.tel.tracer.Start(context.Background(), "raft.node.startup")
+	span.SetAttributes(attribute.Int("node.id", id))
+	span.End()
 
 	lis, err := net.Listen("tcp", listenAddr)
 
@@ -120,7 +159,7 @@ func MakeRaft(id int, peerIds []int, listenAddr string, peerAddrs map[int]string
 		if err != nil {
 			log.Fatalf("Node %d failed to connect to %d: %v", id, pid, err)
 		}
-		rf.peerClients[pid] = pb.NewRaftClient(conn)
+		clients[pid] = pb.NewRaftClient(conn)
 	}
 
 	// Delay election loop to let all nodes start
@@ -158,10 +197,7 @@ func (rf *Raft) termClock() {
 			electionTimeout.Reset(getTimeout())
 
 		case <-electionTimeout.C: // Election timeout
-			if rf.State != Leader {
-				fmt.Println("Time out: Election start")
-				rf.startElection()
-			}
+			rf.startElection()
 			electionTimeout.Reset(getTimeout())
 
 		case <-heartbeatInterval.C: // Leader sends heartbeat
@@ -179,6 +215,13 @@ func (rf *Raft) startElection() {
 
 	// Vote for self and increment term
 	rf.mu.Lock()
+	if rf.State == Leader {
+		rf.mu.Unlock()
+		return
+	}
+
+	fmt.Println("Time out: Election start")
+
 	rf.State = Candidate
 	rf.CurrentTerm += 1
 	rf.VotedFor = rf.Id
@@ -201,7 +244,7 @@ func (rf *Raft) startElection() {
 				LastLogTerm:  0,
 			}
 
-			reply, err := rf.peerClients[targetId].RequestVote(context.Background(), args)
+			reply, err := rf.transport.RequestVote(context.Background(), targetId, args)
 
 			if err != nil {
 				log.Printf("Node %d failed to request vote from %d: %v", rf.Id, targetId, err)
@@ -300,13 +343,15 @@ func (rf *Raft) broadcastHeartbeat() {
 			continue
 		}
 		go func(targetId int) {
+			rf.mu.Lock()
 			nextIndex := rf.NextIndex[targetId]
 
 			args := &pb.AppendEntriesArgs{Term: int32(savedTerm), LeaderId: int32(savedTermId)}
 			args.Entries = rf.Log[nextIndex:]
 			args.PrevLogIndex = int32(nextIndex - 1)
+			rf.mu.Unlock()
 
-			if reply, err := rf.peerClients[targetId].AppendEntries(context.Background(), args); err == nil {
+			if reply, err := rf.transport.AppendEntries(context.Background(), targetId, args); err == nil {
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
 				if reply.Term > int32(rf.CurrentTerm) {
@@ -333,6 +378,11 @@ func (rf *Raft) Kill() {
 	defer rf.mu.Unlock()
 	rf.State = Dead
 	fmt.Printf("Node %d killed\n", rf.Id)
+}
+
+func (rf *Raft) Shutdown(ctx context.Context) error {
+	rf.Kill()
+	return rf.tel.Shutdown(ctx)
 }
 
 func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (*pb.AppendEntriesReply, error) {
@@ -383,14 +433,25 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *pb.AppendEntriesArgs) (
 	return reply, nil
 }
 
-func (rf *Raft) SubmitCommand(ctx context.Context, args *pb.SubmitCommandArgs) (*pb.SubmitCommandReply, error) {
+func (rf *Raft) Submit(command []byte) (index int, term int, isLeader bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
 	if rf.State != Leader {
+		return -1, rf.CurrentTerm, false
+	}
+
+	rf.Log = append(rf.Log, &pb.LogEntry{Term: int32(rf.CurrentTerm), Command: command})
+	return len(rf.Log), rf.CurrentTerm, true
+}
+
+func (rf *Raft) SubmitCommand(ctx context.Context, args *pb.SubmitCommandArgs) (*pb.SubmitCommandReply, error) {
+	_, _, isLeader := rf.Submit(args.Command)
+
+	if !isLeader {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
 		return &pb.SubmitCommandReply{Success: false, LeaderId: int32(rf.leaderId)}, nil
-	} else {
-		rf.Log = append(rf.Log, &pb.LogEntry{Term: int32(rf.CurrentTerm), Command: args.Command})
 	}
 
 	return &pb.SubmitCommandReply{Success: true, LeaderId: int32(rf.Id)}, nil

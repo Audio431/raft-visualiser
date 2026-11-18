@@ -1,5 +1,7 @@
 # Raft Consensus Algorithm Visualiser
 
+![Raft tests](https://github.com/Audio431/raft-visualiser/actions/workflows/mit-tests.yml/badge.svg?branch=dev)
+
 The Raft consensus algorithm, as specified in [Ongaro & Ousterhout (2014)](https://pdos.csail.mit.edu/6.824/papers/raft-extended.pdf), is designed for understandability — yet most available implementations simplify or omit portions of the specification in favour of demonstration. This project takes the opposite approach: a precise implementation of the extended paper, conducted alongside the [MIT 6.5840 Distributed Systems](https://pdos.csail.mit.edu/6.824/) course (formerly 6.824), with a visualisation layer for real-time inspection of cluster behaviour.
 
 The system comprises two components:
